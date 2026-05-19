@@ -1,0 +1,11 @@
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.idea/
+*.iml
+.DS_Store
+.opencode/
+test-output/
+benchmark-data/
+.sisyphus/
