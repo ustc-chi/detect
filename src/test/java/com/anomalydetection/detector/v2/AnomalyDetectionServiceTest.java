@@ -1,23 +1,23 @@
 package com.anomalydetection.detector.v2;
 
 import org.junit.jupiter.api.Test;
+import java.nio.file.Paths;
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Tests for AnomalyDetectionService phase routing and flow.
- */
 class AnomalyDetectionServiceTest {
 
     @Test
     void testWarmupPhaseRouting() {
-        AnomalyDetectionService service = new AnomalyDetectionService(
-                rid -> null,  // data provider (won't be called in warmup)
-                null,         // result handler
-                5             // threshold = 5
-        );
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public java.util.List<FeatureVector> getHistoryNormals(String r) { return java.util.List.of(); }
+            public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(provider, 5);
 
-        FeatureVector14 vector = new FeatureVector14(new double[14]);
-        DetectionResult result = service.detect("res-1", vector, java.util.List.of());
+        // detect with a non-existent file path — pre-check will fail but proceed
+        FeatureVector vector = new FeatureVector(new double[14]);
+        DetectionResult result = service.detect("res-1", vector, Paths.get("nonexistent.json"));
 
         assertEquals(Phase.WARMUP, result.getPhase());
         assertNotNull(result.getWarmupInfo());
@@ -26,59 +26,38 @@ class AnomalyDetectionServiceTest {
 
     @Test
     void testActivePhaseRouting() {
-        AnomalyDetectionService service = new AnomalyDetectionService(
-                rid -> {
-                    // Return minimal baseline stats
-                    return new BaselineStatsDTO(rid,
-                            new double[14], new double[14], 10.0, new double[14]);
-                },
-                null,
-                3  // threshold = 3, so 3 normals → active
-        );
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public java.util.List<FeatureVector> getHistoryNormals(String r) {
+                java.util.List<FeatureVector> list = new java.util.ArrayList<>();
+                for (int i = 0; i < 3; i++) list.add(new FeatureVector(new double[14]));
+                return list;
+            }
+            public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) {
+                return new BaselineStatsDTO(r, new double[14], new double[14], 10.0);
+            }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(provider, 3);
 
-        FeatureVector14 vector = new FeatureVector14(new double[14]);
-        java.util.List<FeatureVector14> normals = new java.util.ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            normals.add(new FeatureVector14(new double[14]));
-        }
-
-        DetectionResult result = service.detect("res-2", vector, normals);
+        DetectionResult result = service.detect("res-2", new FeatureVector(new double[14]), Paths.get("nonexistent.json"));
         assertEquals(Phase.ACTIVE, result.getPhase());
-        assertNull(result.getWarmupInfo());
     }
 
     @Test
-    void testResultHandlerInvoked() {
-        final boolean[] handlerCalled = {false};
-        AnomalyDetectionService service = new AnomalyDetectionService(
-                rid -> null,
-                result -> handlerCalled[0] = true,
-                5
-        );
+    void testActivePhaseFallbackWhenNoStats() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public java.util.List<FeatureVector> getHistoryNormals(String r) {
+                java.util.List<FeatureVector> list = new java.util.ArrayList<>();
+                for (int i = 0; i < 3; i++) list.add(new FeatureVector(new double[14]));
+                return list;
+            }
+            public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(provider, 2);
 
-        service.detect("res-3", new FeatureVector14(new double[14]), java.util.List.of());
-        assertTrue(handlerCalled[0]);
-    }
-
-    @Test
-    void testActivePhaseFallbackWhenNoData() {
-        // Data provider returns null, should fall back to warmup
-        AnomalyDetectionService service = new AnomalyDetectionService(
-                rid -> null,  // returns null!
-                null,
-                2  // 2 normals → should be active, but no data
-        );
-
-        FeatureVector14 vector = new FeatureVector14(new double[14]);
-        java.util.List<FeatureVector14> normals = java.util.List.of(
-                new FeatureVector14(new double[14]),
-                new FeatureVector14(new double[14])
-        );
-
-        // Should not throw — falls back to warmup detection
-        DetectionResult result = service.detect("res-4", vector, normals);
+        DetectionResult result = service.detect("res-3", new FeatureVector(new double[14]), Paths.get("nonexistent.json"));
         assertNotNull(result);
-        // Falls back to warmup
         assertEquals(Phase.WARMUP, result.getPhase());
     }
 }

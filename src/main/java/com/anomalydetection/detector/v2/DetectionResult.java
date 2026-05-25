@@ -1,15 +1,13 @@
 package com.anomalydetection.detector.v2;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * Complete detection result containing all information needed for reporting.
- * <p>
- * Covers both WARMUP and ACTIVE phases, including per-dimension analysis,
- * directional validation, warmup-specific info, and signature match details.
  */
 public final class DetectionResult {
 
@@ -19,83 +17,70 @@ public final class DetectionResult {
     private final double score;
     private final double threshold;
     private final boolean isAnomaly;
-
     private final List<DimensionReport> dimensions;
     private final List<DimensionReport> topDeviations;
-
     private final DirectionValidation directionValidation;
     private final String signatureMatch;
     private final WarmupInfo warmupInfo;
 
     // ===== Full constructor =====
-    public DetectionResult(String resourceId,
-                           Instant detectionTime,
-                           Phase phase,
-                           double score,
-                           double threshold,
-                           boolean isAnomaly,
-                           List<DimensionReport> dimensions,
-                           List<DimensionReport> topDeviations,
-                           DirectionValidation directionValidation,
-                           String signatureMatch,
+    public DetectionResult(String resourceId, Instant detectionTime, Phase phase,
+                           double score, double threshold, boolean isAnomaly,
+                           List<DimensionReport> dimensions, List<DimensionReport> topDeviations,
+                           DirectionValidation directionValidation, String signatureMatch,
                            WarmupInfo warmupInfo) {
         this.resourceId = resourceId;
         this.detectionTime = detectionTime != null ? detectionTime : Instant.now();
-        this.phase = Objects.requireNonNull(phase, "phase must not be null");
+        this.phase = Objects.requireNonNull(phase);
         this.score = score;
         this.threshold = threshold;
         this.isAnomaly = isAnomaly;
         this.dimensions = dimensions != null ? List.copyOf(dimensions) : List.of();
         this.topDeviations = topDeviations != null ? List.copyOf(topDeviations) : List.of();
-        this.directionValidation = directionValidation != null
-                ? directionValidation : DirectionValidation.notReversed();
+        this.directionValidation = directionValidation != null ? directionValidation : DirectionValidation.notReversed();
         this.signatureMatch = signatureMatch;
         this.warmupInfo = warmupInfo;
     }
 
     // ===== Factory for warmup results =====
-    public static DetectionResult warmupResult(
-            String resourceId,
-            FeatureVector14 vector,
-            double score,
-            double threshold,
-            boolean isAnomaly,
-            String signatureMatch,
-            WarmupInfo warmupInfo) {
+    public static DetectionResult warmupResult(String resourceId, FeatureVector vector,
+                                                 WarmupDetector.WarmupDetectionResult wr) {
         List<DimensionReport> dims = buildBasicDimensionReports(vector);
-        return new DetectionResult(
-                resourceId,
-                Instant.now(),
-                Phase.WARMUP,
-                score,
-                threshold,
-                isAnomaly,
-                dims,
-                List.of(),
-                DirectionValidation.notReversed(),
-                signatureMatch,
-                warmupInfo
+        boolean isAnomaly = wr.isAnomaly();  // true for both ANOMALY and SUSPICIOUS
+
+        // L1/L2: score = matching rule count, threshold = 2 (≥2 rules = anomaly)
+        // L3: score = Euclidean distance, threshold = dynamic threshold
+        double score;
+        double threshold;
+        int layer = wr.getLayer();
+        if (layer == 3) {
+            score = wr.getStatisticalScore();
+            threshold = wr.getDynamicThreshold();
+        } else {
+            score = wr.getTriggeredRules().size();
+            threshold = 2.0;
+        }
+
+        WarmupInfo info = new WarmupInfo(
+                wr.getTriggeredRules().size(),
+                wr.getTriggeredRules(),
+                wr.getConfidence(),
+                wr.isAddToBaseline(),
+                wr.getLayer(),
+                wr.getStatisticalScore(),
+                wr.getDynamicThreshold(),
+                wr.getHistorySize()
         );
+        return new DetectionResult(resourceId, Instant.now(), Phase.WARMUP,
+                score, threshold, isAnomaly, dims, Collections.emptyList(),
+                DirectionValidation.notReversed(), null, info);
     }
 
     // ===== Factory for signature-precheck anomaly =====
-    public static DetectionResult signatureAnomaly(
-            String resourceId,
-            Phase phase,
-            String signatureMatch) {
-        return new DetectionResult(
-                resourceId,
-                Instant.now(),
-                phase,
-                Double.MAX_VALUE,
-                0,
-                true,
-                List.of(),
-                List.of(),
-                DirectionValidation.notReversed(),
-                signatureMatch,
-                null
-        );
+    public static DetectionResult signatureAnomaly(String resourceId, Phase phase, String signatureMatch) {
+        return new DetectionResult(resourceId, Instant.now(), phase,
+                Double.MAX_VALUE, 0, true, Collections.emptyList(), Collections.emptyList(),
+                DirectionValidation.notReversed(), signatureMatch, null);
     }
 
     // ===== Getters =====
@@ -111,29 +96,13 @@ public final class DetectionResult {
     public String getSignatureMatch() { return signatureMatch; }
     public WarmupInfo getWarmupInfo() { return warmupInfo; }
 
-    // ===== Helpers =====
-    private static List<DimensionReport> buildBasicDimensionReports(FeatureVector14 vector) {
-        List<DimensionReport> reports = new java.util.ArrayList<>(FeatureVector14.FEATURE_COUNT);
-        for (int i = 0; i < FeatureVector14.FEATURE_COUNT; i++) {
-            reports.add(new DimensionReport(
-                    i,
-                    FeatureVector14.FEATURE_NAMES[i],
-                    vector.get(i),
-                    0,   // zScore not computed in warmup
-                    0,   // contribution not computed in warmup
-                    0,   // weight not applicable
-                    FeatureVector14.FEATURE_DESCRIPTIONS[i],
-                    FeatureVector14.FEATURE_UNITS[i],
-                    vector.getSupplementary(i)
-            ));
+    private static List<DimensionReport> buildBasicDimensionReports(FeatureVector vector) {
+        List<DimensionReport> reports = new ArrayList<>(FeatureVector.FEATURE_COUNT);
+        for (int i = 0; i < FeatureVector.FEATURE_COUNT; i++) {
+            reports.add(new DimensionReport(i, FeatureVector.FEATURE_NAMES[i], vector.get(i),
+                    0, 0, 0, FeatureVector.FEATURE_DESCRIPTIONS[i],
+                    FeatureVector.FEATURE_UNITS[i], vector.getSupplementary(i)));
         }
         return reports;
-    }
-
-    @Override
-    public String toString() {
-        return String.format(
-                "DetectionResult{resource='%s', phase=%s, score=%.4f, threshold=%.4f, anomaly=%s}",
-                resourceId, phase, score, threshold, isAnomaly);
     }
 }

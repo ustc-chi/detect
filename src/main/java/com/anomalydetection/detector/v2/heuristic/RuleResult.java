@@ -1,12 +1,6 @@
 package com.anomalydetection.detector.v2.heuristic;
 
-import java.util.Objects;
-
-/**
- * Result of evaluating a single heuristic rule.
- */
 public final class RuleResult {
-
     private final boolean triggered;
     private final String ruleName;
     private final double confidence;
@@ -19,21 +13,10 @@ public final class RuleResult {
         this.confidence = confidence;
     }
 
-    /**
-     * Factory for a triggered result.
-     */
     public static RuleResult triggered(String ruleName, double confidence) {
-        return new RuleResult(true,
-                Objects.requireNonNull(ruleName, "ruleName must not be null"),
-                confidence);
+        return new RuleResult(true, ruleName, confidence);
     }
-
-    /**
-     * Factory for a non-triggered result.
-     */
-    public static RuleResult notTriggered() {
-        return NOT_TRIGGERED;
-    }
+    public static RuleResult notTriggered() { return NOT_TRIGGERED; }
 
     public boolean isTriggered() { return triggered; }
     public String getRuleName() { return ruleName; }
