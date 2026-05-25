@@ -45,34 +45,32 @@ public final class DetectionResult {
     // ===== Factory for warmup results =====
     public static DetectionResult warmupResult(String resourceId, FeatureVector vector,
                                                  WarmupDetector.WarmupDetectionResult wr) {
-        List<DimensionReport> dims = buildBasicDimensionReports(vector);
-        boolean isAnomaly = wr.isAnomaly();  // true for both ANOMALY and SUSPICIOUS
-
-        // L1/L2: score = matching rule count, threshold = 2 (≥2 rules = anomaly)
-        // L3: score = Euclidean distance, threshold = dynamic threshold
-        double score;
-        double threshold;
+        boolean isAnomaly = wr.isAnomaly();
         int layer = wr.getLayer();
+        double score, threshold;
+        List<DimensionReport> dims;
+        List<DimensionReport> topDevs;
+
         if (layer == 3) {
             score = wr.getStatisticalScore();
             threshold = wr.getDynamicThreshold();
+            dims = wr.getDimensionReports() != null ? wr.getDimensionReports() : buildBasicDimensionReports(vector);
+            topDevs = wr.getTopDeviations() != null ? wr.getTopDeviations() : List.of();
         } else {
             score = wr.getTriggeredRules().size();
             threshold = 2.0;
+            dims = buildBasicDimensionReports(vector);
+            topDevs = List.of();
         }
 
         WarmupInfo info = new WarmupInfo(
-                wr.getTriggeredRules().size(),
-                wr.getTriggeredRules(),
-                wr.getConfidence(),
-                wr.isAddToBaseline(),
-                wr.getLayer(),
-                wr.getStatisticalScore(),
-                wr.getDynamicThreshold(),
-                wr.getHistorySize()
+                wr.getTriggeredRules().size(), wr.getTriggeredRules(),
+                wr.getConfidence(), wr.isAddToBaseline(),
+                wr.getLayer(), wr.getStatisticalScore(),
+                wr.getDynamicThreshold(), wr.getHistorySize()
         );
         return new DetectionResult(resourceId, Instant.now(), Phase.WARMUP,
-                score, threshold, isAnomaly, dims, Collections.emptyList(),
+                score, threshold, isAnomaly, dims, topDevs,
                 DirectionValidation.notReversed(), null, info);
     }
 

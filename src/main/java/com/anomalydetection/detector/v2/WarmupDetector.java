@@ -78,6 +78,8 @@ public class WarmupDetector {
         int n = historyNormals.size();
         double[] median = new double[FeatureVector.FEATURE_COUNT];
         double[] mad = new double[FeatureVector.FEATURE_COUNT];
+        double[] zScores = new double[FeatureVector.FEATURE_COUNT];
+        double[] contributions = new double[FeatureVector.FEATURE_COUNT];
 
         for (int d = 0; d < FeatureVector.FEATURE_COUNT; d++) {
             List<Double> vals = new ArrayList<>(n);
@@ -92,7 +94,33 @@ public class WarmupDetector {
             if (mad[d] < EPSILON) mad[d] = Math.sqrt(EPSILON);
         }
 
-        double score = weightedEuclideanScore(vector, median, mad, WARMUP_WEIGHTS);
+        // Compute z-scores, contributions, and total score for current vector
+        double sumWeightedZ2 = 0;
+        for (int i = 0; i < FeatureVector.FEATURE_COUNT; i++) {
+            double z = (vector.get(i) - median[i]) / Math.max(mad[i], EPSILON);
+            z = Math.max(-Z_CAP, Math.min(Z_CAP, z));
+            zScores[i] = z;
+            contributions[i] = WARMUP_WEIGHTS[i] * z * z;
+            sumWeightedZ2 += contributions[i];
+        }
+        double score = Math.sqrt(sumWeightedZ2);
+
+        // Build dimension reports
+        List<DimensionReport> dims = new ArrayList<>(FeatureVector.FEATURE_COUNT);
+        for (int i = 0; i < FeatureVector.FEATURE_COUNT; i++) {
+            dims.add(new DimensionReport(i, FeatureVector.FEATURE_NAMES[i], vector.get(i),
+                    zScores[i], contributions[i], WARMUP_WEIGHTS[i],
+                    FeatureVector.FEATURE_DESCRIPTIONS[i], FeatureVector.FEATURE_UNITS[i],
+                    vector.getSupplementary(i)));
+        }
+
+        // Compute top deviations (sorted by |contribution|)
+        List<DimensionReport> topDevs = new ArrayList<>(dims);
+        topDevs.sort((a, b) -> Double.compare(Math.abs(b.getContribution()), Math.abs(a.getContribution())));
+        int topN = Math.min(5, topDevs.size());
+        List<DimensionReport> top5 = topDevs.subList(0, topN);
+
+        // Compute max historical score for dynamic threshold
         double maxHistoricalScore = 0.0;
         for (FeatureVector hv : historyNormals) {
             double s = weightedEuclideanScore(hv, median, mad, WARMUP_WEIGHTS);
@@ -106,7 +134,7 @@ public class WarmupDetector {
 
         double dynamicThreshold = maxHistoricalScore * multiplier;
         if (score > dynamicThreshold) {
-            return WarmupDetectionResult.suspicious(score, dynamicThreshold, n);
+            return WarmupDetectionResult.suspicious(score, dynamicThreshold, n, dims, top5);
         }
         return null;
     }
@@ -134,15 +162,19 @@ public class WarmupDetector {
         private final double confidence;
         private final List<String> triggeredRules;
         private final boolean addToBaseline;
-        private final int layer;                 // 0=normal, 1=Layer1, 2=Layer2, 3=Layer3
-        private final double statisticalScore;   // Layer 3 Euclidean score (0 for L1/L2)
-        private final double dynamicThreshold;   // Layer 3 threshold (0 for L1/L2)
-        private final int historySize;           // normals used in Layer 3 (0 for L1/L2)
+        private final int layer;
+        private final double statisticalScore;
+        private final double dynamicThreshold;
+        private final int historySize;
+        private final List<DimensionReport> dimensionReports;
+        private final List<DimensionReport> topDeviations;
 
         public WarmupDetectionResult(WarmupStatus status, double confidence,
                                       List<String> triggeredRules, boolean addToBaseline,
                                       int layer, double statisticalScore,
-                                      double dynamicThreshold, int historySize) {
+                                      double dynamicThreshold, int historySize,
+                                      List<DimensionReport> dimensionReports,
+                                      List<DimensionReport> topDeviations) {
             this.status = status;
             this.confidence = confidence;
             this.triggeredRules = triggeredRules;
@@ -151,23 +183,26 @@ public class WarmupDetector {
             this.statisticalScore = statisticalScore;
             this.dynamicThreshold = dynamicThreshold;
             this.historySize = historySize;
+            this.dimensionReports = dimensionReports;
+            this.topDeviations = topDeviations;
         }
 
-        // Backward-compatible constructor for simple cases
         public static WarmupDetectionResult normal(int historySize) {
             return new WarmupDetectionResult(WarmupStatus.NORMAL, 0.0, List.of(), true,
-                    0, 0, 0, historySize);
+                    0, 0, 0, historySize, List.of(), List.of());
         }
 
         public static WarmupDetectionResult anomaly(int layer, double confidence, List<String> rules) {
             return new WarmupDetectionResult(WarmupStatus.ANOMALY, confidence, rules, false,
-                    layer, 0, 0, 0);
+                    layer, 0, 0, 0, List.of(), List.of());
         }
 
-        public static WarmupDetectionResult suspicious(double score, double threshold, int historySize) {
+        public static WarmupDetectionResult suspicious(double score, double threshold, int historySize,
+                                                         List<DimensionReport> dims,
+                                                         List<DimensionReport> top5) {
             return new WarmupDetectionResult(WarmupStatus.SUSPICIOUS, 0.70,
                     List.of("STATISTICAL_ANOMALY"), false,
-                    3, score, threshold, historySize);
+                    3, score, threshold, historySize, dims, top5);
         }
 
         public WarmupStatus getStatus() { return status; }
@@ -179,5 +214,7 @@ public class WarmupDetector {
         public double getStatisticalScore() { return statisticalScore; }
         public double getDynamicThreshold() { return dynamicThreshold; }
         public int getHistorySize() { return historySize; }
+        public List<DimensionReport> getDimensionReports() { return dimensionReports; }
+        public List<DimensionReport> getTopDeviations() { return topDeviations; }
     }
 }
