@@ -1,23 +1,19 @@
 package com.anomalydetection.detector;
 
-import com.anomalydetection.features.RansomwareFeatureVector;
+import com.anomalydetection.features.FeatureType;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
+/**
+ * Directional validator for quiet-day reversal detection.
+ * Evaluates whether the anomaly score is driven by below-baseline deviations
+ * (quiet day reversal), and if so, flips the result to normal.
+ */
 public class DirectionalValidator {
 
     private final double[] weights;
     private final double threshold;
-
-    public DirectionalValidator(double[] weights, double threshold) {
-        if (weights == null || weights.length != RansomwareFeatureVector.FEATURE_COUNT) {
-            throw new IllegalArgumentException("weights must have " + RansomwareFeatureVector.FEATURE_COUNT + " elements");
-        }
-        this.weights = weights;
-        this.threshold = threshold;
-    }
 
     public static class FeatureDeviation {
         private final String name;
@@ -29,7 +25,6 @@ public class DirectionalValidator {
             this.zScore = zScore;
             this.direction = direction;
         }
-
         public String name() { return name; }
         public double zScore() { return zScore; }
         public String direction() { return direction; }
@@ -43,7 +38,7 @@ public class DirectionalValidator {
         public final List<FeatureDeviation> topDeviations;
 
         public ValidationResult(boolean reversed, double ratio, double eUp, double eDown,
-                                List<FeatureDeviation> topDeviations) {
+                                 List<FeatureDeviation> topDeviations) {
             this.reversed = reversed;
             this.ratio = ratio;
             this.eUp = eUp;
@@ -52,44 +47,45 @@ public class DirectionalValidator {
         }
     }
 
+    public DirectionalValidator(double[] weights, double threshold) {
+        if (weights == null || weights.length != FeatureType.COUNT) {
+            throw new IllegalArgumentException("weights must have " + FeatureType.COUNT + " elements");
+        }
+        this.weights = weights.clone();
+        this.threshold = threshold;
+    }
+
     public ValidationResult validate(double[] zScores) {
         if (zScores == null || zScores.length != weights.length) {
             throw new IllegalArgumentException("zScores must have " + weights.length + " elements");
         }
-
         if (threshold == 0) {
             return new ValidationResult(false, 0, 0, 0, computeTopDeviations(zScores, 5));
         }
-
-        double eUp = 0;
-        double eDown = 0;
+        double eUp = 0, eDown = 0;
         for (int i = 0; i < weights.length; i++) {
             double z = zScores[i];
-            if (z > 0) {
-                eUp += weights[i] * z * z;
-            } else if (z < 0) {
-                eDown += weights[i] * z * z;
-            }
+            if (z > 0) eUp += weights[i] * z * z;
+            else if (z < 0) eDown += weights[i] * z * z;
         }
-
         double ratio = eDown / (eUp + eDown + 1e-10);
-        boolean reversed = ratio > threshold;
-
-        return new ValidationResult(reversed, ratio, eUp, eDown, computeTopDeviations(zScores, 5));
+        return new ValidationResult(ratio > threshold, ratio, eUp, eDown, computeTopDeviations(zScores, 5));
     }
 
-    private List<FeatureDeviation> computeTopDeviations(double[] zScores, int n) {
-        List<FeatureDeviation> all = new ArrayList<>();
-        for (int i = 0; i < zScores.length; i++) {
-            String name = RansomwareFeatureVector.FEATURE_NAMES[i];
-            double z = zScores[i];
-            String direction = z >= 0 ? "ABOVE" : "BELOW";
-            all.add(new FeatureDeviation(name, z, direction));
+    private List<FeatureDeviation> computeTopDeviations(double[] zScores, int count) {
+        List<Integer> indices = new ArrayList<>();
+        for (int i = 0; i < zScores.length; i++) indices.add(i);
+        indices.sort((a, b) -> Double.compare(
+                Math.abs(zScores[b]) * weights[b],
+                Math.abs(zScores[a]) * weights[a]));
+
+        List<FeatureDeviation> result = new ArrayList<>();
+        for (int i = 0; i < Math.min(count, indices.size()); i++) {
+            int idx = indices.get(i);
+            String name = FeatureType.values()[idx].key();
+            String dir = zScores[idx] > 0 ? "UP" : "DOWN";
+            result.add(new FeatureDeviation(name, zScores[idx], dir));
         }
-
-        all.sort((a, b) -> Double.compare(Math.abs(b.zScore()), Math.abs(a.zScore())));
-
-        int limit = Math.min(n, all.size());
-        return new ArrayList<>(all.subList(0, limit));
+        return result;
     }
 }
