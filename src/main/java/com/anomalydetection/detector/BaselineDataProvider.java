@@ -15,4 +15,15 @@ public interface BaselineDataProvider {
     List<FeatureVector> getHistoryAnomalies(String resourceId);
 
     BaselineStatsDTO getBaselineStats(String resourceId);
+
+    /**
+     * Returns baseline statistics (median, MAD, threshold) for the given resource,
+     * with the given detection sensitivity. Implementations SHOULD pass the
+     * sensitivity to the external module API so that an adjusted threshold is returned.
+     *
+     * @param resourceId  the resource identifier
+     * @param sensitivity detection sensitivity in [0.0, 1.0]
+     * @return baseline statistics, or null if not available
+     */
+    BaselineStatsDTO getBaselineStats(String resourceId, double sensitivity);
 }

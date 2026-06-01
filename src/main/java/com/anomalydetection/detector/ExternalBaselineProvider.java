@@ -35,4 +35,11 @@ public class ExternalBaselineProvider implements BaselineDataProvider {
                 + ") — returning null.");
         return null;
     }
+
+    @Override
+    public BaselineStatsDTO getBaselineStats(String resourceId, double sensitivity) {
+        LOG.warning("[NOT YET IMPLEMENTED] getBaselineStats(" + resourceId
+                + ", sensitivity=" + sensitivity + ") — returning null.");
+        return null;
+    }
 }

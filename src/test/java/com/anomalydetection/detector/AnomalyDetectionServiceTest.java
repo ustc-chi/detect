@@ -3,9 +3,10 @@ package com.anomalydetection.detector;
 import com.anomalydetection.features.FeatureType;
 import com.anomalydetection.features.FeatureVector;
 import org.junit.jupiter.api.Test;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AnomalyDetectionServiceTest {
@@ -14,80 +15,131 @@ class AnomalyDetectionServiceTest {
         return new FeatureVector();
     }
 
-    private static Path createEmptySnapdiff() throws IOException {
-        Path f = Files.createTempFile("snapdiff-", ".json");
-        Files.writeString(f, "[]");
-        return f;
-    }
-
-    @Test
-    void testWarmupPhaseRouting() throws IOException {
-        Path tmp = createEmptySnapdiff();
-        try {
-            BaselineDataProvider provider = new BaselineDataProvider() {
-                public java.util.List<FeatureVector> getHistoryNormals(String r) { return java.util.List.of(); }
-                public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
-                public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            };
-            AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
-            DetectionResult result = service.detect(tmp, createVector(), "res-1");
-            assertEquals(Phase.WARMUP, result.getPhase());
-            assertNotNull(result.getWarmupInfo());
-            assertEquals("res-1", result.getResourceId());
-        } finally {
-            Files.deleteIfExists(tmp);
+    private static FeatureVector createVectorWithPrecheck(String[] extensions, String[] notes) {
+        FeatureVector v = new FeatureVector();
+        Map<String, String[]> info = new HashMap<>();
+        if (extensions != null) {
+            info.put("precheck_suspicious_extensions", extensions);
         }
-    }
-
-    @Test
-    void testActivePhaseRouting() throws IOException {
-        Path tmp = createEmptySnapdiff();
-        try {
-            BaselineDataProvider provider = new BaselineDataProvider() {
-                public java.util.List<FeatureVector> getHistoryNormals(String r) {
-                    java.util.List<FeatureVector> list = new java.util.ArrayList<>();
-                    for (int i = 0; i < 3; i++) list.add(new FeatureVector());
-                    return list;
-                }
-                public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
-                public BaselineStatsDTO getBaselineStats(String r) {
-                    return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
-                            new double[FeatureType.COUNT], 10.0);
-                }
-            };
-            AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
-            DetectionResult result = service.detect(tmp, createVector(), "res-2");
-            assertEquals(Phase.ACTIVE, result.getPhase());
-        } finally {
-            Files.deleteIfExists(tmp);
+        if (notes != null) {
+            info.put("precheck_ransom_notes", notes);
         }
+        // Override the extendInfo via the existing getter — extendInfo has a @Getter
+        // We need to set it. Since FeatureVector.extendInfo has @Getter only (no setter),
+        // we use putExtendInfo which writes per-FeatureType. Instead, we directly
+        // populate the map returned by getExtendInfo().
+        v.getExtendInfo().putAll(info);
+        return v;
     }
 
     @Test
-    void testActivePhaseFallbackWhenNoStats() throws IOException {
-        Path tmp = createEmptySnapdiff();
-        try {
-            BaselineDataProvider provider = new BaselineDataProvider() {
-                public java.util.List<FeatureVector> getHistoryNormals(String r) {
-                    java.util.List<FeatureVector> list = new java.util.ArrayList<>();
-                    for (int i = 0; i < 3; i++) list.add(new FeatureVector());
-                    return list;
-                }
-                public java.util.List<FeatureVector> getHistoryAnomalies(String r) { return java.util.List.of(); }
-                public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            };
-            AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
-            DetectionResult result = service.detect(tmp, createVector(), "res-3");
-            assertEquals(Phase.WARMUP, result.getPhase());
-        } finally {
-            Files.deleteIfExists(tmp);
-        }
+    void testWarmupPhaseRouting() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
+        DetectionResult result = service.detect(createVector(), "res-1", 0.7);
+        assertEquals(Phase.WARMUP, result.getPhase());
+        assertNotNull(result.getWarmupInfo());
+        assertEquals("res-1", result.getResourceId());
     }
 
     @Test
-    void testPreCheckFileNotFound() {
-        AnomalyDetectionService service = new AnomalyDetectionService(3, new ExternalBaselineProvider());
-        assertThrows(IOException.class, () ->
-            service.detect(Path.of("nonexistent.json"), createVector(), "res-4"));
+    void testActivePhaseRouting() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) {
+                List<FeatureVector> list = new java.util.ArrayList<>();
+                for (int i = 0; i < 3; i++) list.add(new FeatureVector());
+                return list;
+            }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) {
+                return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
+                        new double[FeatureType.COUNT], 10.0);
+            }
+            public BaselineStatsDTO getBaselineStats(String r, double s) {
+                return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
+                        new double[FeatureType.COUNT], 10.0);
+            }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
+        DetectionResult result = service.detect(createVector(), "res-2", 0.7);
+        assertEquals(Phase.ACTIVE, result.getPhase());
+    }
+
+    @Test
+    void testActivePhaseFallbackWhenNoStats() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) {
+                List<FeatureVector> list = new java.util.ArrayList<>();
+                for (int i = 0; i < 3; i++) list.add(new FeatureVector());
+                return list;
+            }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
+        DetectionResult result = service.detect(createVector(), "res-3", 0.7);
+        assertEquals(Phase.WARMUP, result.getPhase());
+    }
+
+    @Test
+    void testPreCheckHitWithExtensions() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
+        FeatureVector vector = createVectorWithPrecheck(
+                new String[]{"/data/file.locked", "/docs/info.encrypted"},
+                new String[]{"/data/README_UNLOCK.txt"});
+        DetectionResult result = service.detect(vector, "res-4", 0.7);
+        // signatureMatchResult uses Phase.WARMUP — distinguish by non-null signatureMatch
+        assertNotNull(result.getSignatureMatch());
+        assertTrue(result.isAnomaly());
+        String sig = result.getSignatureMatch();
+        assertNotNull(sig);
+        assertTrue(sig.contains(".locked") || sig.contains(".encrypted"));
+        assertTrue(sig.contains("README_UNLOCK"));
+    }
+
+    @Test
+    void testPreCheckHitWithRansomNotesOnly() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
+        FeatureVector vector = createVectorWithPrecheck(
+                null,
+                new String[]{"/tmp/HOW_TO_DECRYPT.html"});
+        DetectionResult result = service.detect(vector, "res-5", 0.7);
+        assertNotNull(result.getSignatureMatch());
+        assertTrue(result.isAnomaly());
+        String sig = result.getSignatureMatch();
+        assertNotNull(sig);
+        assertTrue(sig.contains("HOW_TO_DECRYPT"));
+    }
+
+    @Test
+    void testPreCheckNoHit() {
+        BaselineDataProvider provider = new BaselineDataProvider() {
+            public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
+            public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
+            public BaselineStatsDTO getBaselineStats(String r) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+        };
+        AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
+        FeatureVector vector = createVector(); // no precheck data
+        DetectionResult result = service.detect(vector, "res-6", 0.7);
+        assertEquals(Phase.WARMUP, result.getPhase()); // falls through to warmup
     }
 }

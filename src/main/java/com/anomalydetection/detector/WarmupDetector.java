@@ -59,12 +59,17 @@ public class WarmupDetector {
     }
 
     /**
-     * Detect anomaly in warmup phase.
+     * Detect anomaly in warmup phase with the given sensitivity.
+     *
      * @param vector         current feature vector from feature-extractor
      * @param historyNormals previously accumulated normal vectors
+     * @param sensitivity    detection sensitivity in [0.0, 1.0] (1.0 = most sensitive)
      * @return warmup detection result
      */
-    public WarmupDetectionResult detect(FeatureVector vector, List<FeatureVector> historyNormals) {
+    public WarmupDetectionResult detect(FeatureVector vector, List<FeatureVector> historyNormals,
+                                        double sensitivity) {
+        double thresholdMultiplier = SensitivityAdjuster.getThresholdMultiplier(sensitivity);
+
         List<String> triggeredRules = new ArrayList<>();
         double maxConfidence = 0.0;
 
@@ -79,7 +84,10 @@ public class WarmupDetector {
             }
         }
 
-        if (!triggeredRules.isEmpty()) {
+        // Apply sensitivity multiplier to Layer 2 rule confidence threshold.
+        // Lower multiplier (high sensitivity) → lower effective threshold → more triggers.
+        // Higher multiplier (low sensitivity) → higher effective threshold → fewer triggers.
+        if (!triggeredRules.isEmpty() && maxConfidence >= 0.5 * thresholdMultiplier) {
             return WarmupDetectionResult.anomaly(2, maxConfidence, triggeredRules);
         }
 
@@ -90,6 +98,17 @@ public class WarmupDetector {
         }
 
         return WarmupDetectionResult.normal(triggeredRules);
+    }
+
+    /**
+     * Detect anomaly in warmup phase with default sensitivity (0.7).
+     *
+     * @param vector         current feature vector from feature-extractor
+     * @param historyNormals previously accumulated normal vectors
+     * @return warmup detection result
+     */
+    public WarmupDetectionResult detect(FeatureVector vector, List<FeatureVector> historyNormals) {
+        return detect(vector, historyNormals, SensitivityAdjuster.getDefaultSensitivity());
     }
 
     // =====================================================================
