@@ -18,22 +18,22 @@ class HeuristicRuleTest {
 
     @Test
     void testModificationRatioRule_Triggers() {
-        // F0=modification_ratio=0.96, F3=total_operations_normalized=100
-        FeatureVector fv = createVector(0.96, 0, 0, 100);
+        // F0=0.96 > 0.82, F3=200 > 100 (MIN_OPS)
+        FeatureVector fv = createVector(0.96, 0, 0, 200);
         assertTrue(new ModificationRatioRule().evaluate(fv).isTriggered());
     }
 
     @Test
     void testModificationRatioRule_TooFewOps() {
-        // F0=modification_ratio=0.96, F3=total_operations_normalized=30 (below MIN_OPS=50)
+        // F0=0.96 > 0.82, F3=30 < 100 (MIN_OPS)
         FeatureVector fv = createVector(0.96, 0, 0, 30);
         assertFalse(new ModificationRatioRule().evaluate(fv).isTriggered());
     }
 
     @Test
     void testBurstModPurityRule_Triggers() {
-        // F4=peak_burst_velocity=200, F5=burst_mod_purity=0.96
-        FeatureVector fv = createVector(0, 0, 0, 0, 200, 0.96);
+        // F4=2000 > 1000 (MIN_VELOCITY), F5=0.96 > 0.88 (PURITY_THRESHOLD)
+        FeatureVector fv = createVector(0, 0, 0, 0, 2000, 0.96);
         assertTrue(new BurstModPurityRule().evaluate(fv).isTriggered());
     }
 
@@ -53,8 +53,8 @@ class HeuristicRuleTest {
 
     @Test
     void testDeletionIntensityRule_Triggers() {
-        // F1=deletion_ratio=0.8
-        FeatureVector fv = createVector(0, 0.8);
+        // F1=0.8 > 0.45, F3=200 > 100 (MIN_OPS)
+        FeatureVector fv = createVector(0, 0.8, 0, 200);
         assertTrue(new DeletionIntensityRule().evaluate(fv).isTriggered());
     }
 

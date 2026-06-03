@@ -128,6 +128,9 @@ public class WeightOptimizer {
         for (int i = 0; i < featureCount; i++) {
             w[i] /= sum;
         }
+        // Constrain F10 (rename_correlation): known false-positive risk,
+        // cap its weight at 30% of its sampled value.
+        w[FeatureType.RENAME_CORRELATION.ordinal()] *= 0.3;
         return w;
     }
 

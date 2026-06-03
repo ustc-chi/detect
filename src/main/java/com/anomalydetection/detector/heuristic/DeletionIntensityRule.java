@@ -13,13 +13,15 @@ import com.anomalydetection.features.FeatureVector;
  */
 public class DeletionIntensityRule implements HeuristicRule {
     private static final String RULE_NAME = "HIGH_DELETION_INTENSITY";
-    private static final double DELETION_THRESHOLD = 0.5;
+    private static final double DELETION_THRESHOLD = 0.45;
+    private static final double MIN_OPS = 100;
     private static final double CONFIDENCE = 0.70;
 
     @Override
     public RuleResult evaluate(FeatureVector vector) {
         double delRatio = vector.get(FeatureType.DELETION_RATIO);
-        if (delRatio > DELETION_THRESHOLD) {
+        double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
+        if (delRatio > DELETION_THRESHOLD && dailyOps > MIN_OPS) {
             return RuleResult.triggered(RULE_NAME, CONFIDENCE);
         }
         return RuleResult.notTriggered();

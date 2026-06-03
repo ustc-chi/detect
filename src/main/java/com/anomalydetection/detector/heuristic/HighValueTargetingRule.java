@@ -9,7 +9,7 @@ import com.anomalydetection.features.FeatureVector;
  */
 public class HighValueTargetingRule implements HeuristicRule {
     private static final String RULE_NAME = "HIGH_VALUE_TARGETING";
-    private static final double HV_RATIO_THRESHOLD = 0.8;
+    private static final double HV_RATIO_THRESHOLD = 0.65;
     private static final double MIN_OPS = 100;
     private static final double CONFIDENCE = 0.75;
 

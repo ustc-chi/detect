@@ -13,7 +13,7 @@ import com.anomalydetection.features.FeatureVector;
  */
 public class FileTypeConcentrationRule implements HeuristicRule {
     private static final String RULE_NAME = "LOW_PER_TYPE_ENTROPY";
-    private static final double ENTROPY_THRESHOLD = 0.3;
+    private static final double ENTROPY_THRESHOLD = 0.60;
     private static final double MIN_OPS = 100;
     private static final double CONFIDENCE = 0.80;
 
@@ -23,6 +23,18 @@ public class FileTypeConcentrationRule implements HeuristicRule {
         double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
         // Low entropy = concentrated operation type (potential encryption)
         if (entropy < ENTROPY_THRESHOLD && dailyOps > MIN_OPS) {
+            return RuleResult.triggered(RULE_NAME, CONFIDENCE);
+        }
+        return RuleResult.notTriggered();
+    }
+
+    @Override
+    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+        double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
+        double entropy = vector.get(FeatureType.PER_TYPE_ENTROPY);
+        double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
+        double adjustedThreshold = ENTROPY_THRESHOLD * multiplier;
+        if (entropy < adjustedThreshold && dailyOps > MIN_OPS) {
             return RuleResult.triggered(RULE_NAME, CONFIDENCE);
         }
         return RuleResult.notTriggered();

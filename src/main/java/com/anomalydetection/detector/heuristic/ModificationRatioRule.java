@@ -9,8 +9,8 @@ import com.anomalydetection.features.FeatureVector;
  */
 public class ModificationRatioRule implements HeuristicRule {
     private static final String RULE_NAME = "EXTREME_MODIFICATION_RATIO";
-    private static final double MOD_RATIO_THRESHOLD = 0.95;
-    private static final double MIN_OPS = 50;
+    private static final double MOD_RATIO_THRESHOLD = 0.82;
+    private static final double MIN_OPS = 100;
     private static final double CONFIDENCE = 0.90;
 
     @Override
@@ -18,6 +18,18 @@ public class ModificationRatioRule implements HeuristicRule {
         double modRatio = vector.get(FeatureType.MODIFICATION_RATIO);
         double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
         if (modRatio > MOD_RATIO_THRESHOLD && dailyOps > MIN_OPS) {
+            return RuleResult.triggered(RULE_NAME, CONFIDENCE);
+        }
+        return RuleResult.notTriggered();
+    }
+
+    @Override
+    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+        double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
+        double modRatio = vector.get(FeatureType.MODIFICATION_RATIO);
+        double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
+        double adjustedThreshold = MOD_RATIO_THRESHOLD * multiplier;
+        if (modRatio > adjustedThreshold && dailyOps > MIN_OPS) {
             return RuleResult.triggered(RULE_NAME, CONFIDENCE);
         }
         return RuleResult.notTriggered();

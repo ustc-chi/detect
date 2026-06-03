@@ -50,23 +50,26 @@ public class AnomalyDetectionService {
     //       PRIMARY KEY (resource_id, dim_index)
     //   );
     // =====================================================================
+    // Optimized via WeightOptimizationRunner (seed=42, 20000 iterations, 2026-06-02)
+    // Dataset: 50 core normals (N1+N2+N3+N5+N6) vs 69 attack variants (14 types)
+    // AUC=0.9626, detected=59/69, core FP=2/48
     private static final double[] FALLBACK_WEIGHTS = {
-        2.0,   // F0  modification_ratio
-        0.5,   // F1  deletion_ratio
-        0.5,   // F2  creation_ratio
-        2.5,   // F3  total_operations_normalized
-        2.0,   // F4  peak_burst_velocity
-        3.0,   // F5  burst_mod_purity
-        10.0,  // F6  high_value_ext_ratio
-        5.0,   // F7  inter_op_time_cv_burst
-        0.0,   // F8  directory_coverage_depth
-        0.0,   // F9  temporal_uniformity
-        0.0,   // F10 rename_correlation
-        0.0,   // F11 hourly_concentration
-        0.0,   // F12 hourly_entropy
-        2.0,   // F13 per_type_entropy
-        0.0,   // F14 extension_count_cv
-        2.0    // F15 created_ext_novelty
+        0.0444, // F0  modification_ratio
+        0.1572, // F1  deletion_ratio
+        0.0290, // F2  creation_ratio
+        0.0150, // F3  total_operations_normalized
+        0.1090, // F4  peak_burst_velocity
+        0.0105, // F5  burst_mod_purity
+        0.1378, // F6  high_value_ext_ratio
+        0.0123, // F7  inter_op_time_cv_burst
+        0.0043, // F8  directory_coverage_depth
+        0.0767, // F9  temporal_uniformity
+        0.0238, // F10 rename_correlation
+        0.0171, // F11 hourly_concentration
+        0.0128, // F12 hourly_entropy
+        0.0964, // F13 per_type_entropy
+        0.0358, // F14 extension_count_cv
+        0.1625  // F15 created_ext_novelty
     };
 
     // ===== Constructors =====

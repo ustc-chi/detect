@@ -27,8 +27,8 @@ class WarmupDetectorTest {
     @Test
     void testHeuristicRuleTriggersAnomaly() {
         WarmupDetector detector = new WarmupDetector();
-        // High modification_ratio + high total_operations_normalized = triggers rule
-        FeatureVector vec = createVector(0.96, 0, 0, 100);
+        // High modification_ratio (R1) + high burst purity (R2) = >=2 rules trigger
+        FeatureVector vec = createVector(0.96, 0, 0, 200, 2000, 0.96);
         WarmupDetector.WarmupDetectionResult result = detector.detect(vec, java.util.List.of());
         assertTrue(result.isAnomaly());
         assertEquals(2, result.getLayer());

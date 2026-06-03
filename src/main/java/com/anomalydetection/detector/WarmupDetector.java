@@ -22,28 +22,32 @@ public class WarmupDetector {
     private static final double EPSILON = 0.001;
     private static final double MAD_SCALE = 1.4826;
 
-    /** 16-dim warmup weights aligned with FeatureType order. */
+    /** 16-dim warmup weights aligned with FeatureType order.
+     *  Optimized via WeightOptimizationRunner (seed=42, 20000 iterations, 2026-06-02). */
     static final double[] WARMUP_WEIGHTS = {
-        1.0,   // F0  modification_ratio
-        0.5,   // F1  deletion_ratio
-        0.5,   // F2  creation_ratio
-        0.5,   // F3  total_operations_normalized
-        2.0,   // F4  peak_burst_velocity
-        5.0,   // F5  burst_mod_purity
-        1.5,   // F6  high_value_ext_ratio
-        3.0,   // F7  inter_op_time_cv_burst
-        0.5,   // F8  directory_coverage_depth
-        0.0,   // F9  temporal_uniformity
-        0.0,   // F10 rename_correlation
-        0.0,   // F11 hourly_concentration
-        0.0,   // F12 hourly_entropy
-        1.0,   // F13 per_type_entropy
-        0.0,   // F14 extension_count_cv
-        0.0    // F15 created_ext_novelty
+        0.0444, // F0  modification_ratio
+        0.1572, // F1  deletion_ratio
+        0.0290, // F2  creation_ratio
+        0.0150, // F3  total_operations_normalized
+        0.1090, // F4  peak_burst_velocity
+        0.0105, // F5  burst_mod_purity
+        0.1378, // F6  high_value_ext_ratio
+        0.0123, // F7  inter_op_time_cv_burst
+        0.0043, // F8  directory_coverage_depth
+        0.0767, // F9  temporal_uniformity
+        0.0238, // F10 rename_correlation
+        0.0171, // F11 hourly_concentration
+        0.0128, // F12 hourly_entropy
+        0.0964, // F13 per_type_entropy
+        0.0358, // F14 extension_count_cv
+        0.1625  // F15 created_ext_novelty
     };
 
+    // Adaptive multipliers for z-score based dynamic threshold.
+    // Calibrated for the z-score scoring scale (typical historyScores range 0.5~3.0).
+    // Lower values than the original raw-scale multipliers since z-scores are ~1000x smaller.
     static final double[] MULTIPLIER_BOUNDARIES = {2, 4, 6, 8};
-    static final double[] MULTIPLIER_VALUES = {10.0, 5.0, 3.0, 2.0};
+    static final double[] MULTIPLIER_VALUES = {4.0, 2.5, 1.8, 1.2};
 
     private final List<HeuristicRule> rules;
 
@@ -57,6 +61,21 @@ public class WarmupDetector {
                 new DeletionIntensityRule()
         );
     }
+
+    /** Prior median for Bayesian shrinkage (from N1 design baseline). */
+    private static final double[] PRIOR_MEDIAN = {
+        0.50, 0.15, 0.25, 12000, 3000, 0.60, 0.28, 1.20,
+        40, 0.50, 0.03, 0.20, 3.50, 1.20, 1.50, 0.10
+    };
+
+    /** Prior MAD for Bayesian shrinkage (from N1 design baseline). */
+    private static final double[] PRIOR_MAD = {
+        0.10, 0.05, 0.08, 5000, 2000, 0.12, 0.06, 0.25,
+        15, 0.12, 0.02, 0.06, 0.50, 0.15, 0.60, 0.08
+    };
+
+    /** Effective sample size of the prior (20 = moderate confidence). */
+    private static final double PRIOR_EFFECTIVE_N = 20.0;
 
     /**
      * Detect anomaly in warmup phase with the given sensitivity.
@@ -73,9 +92,9 @@ public class WarmupDetector {
         List<String> triggeredRules = new ArrayList<>();
         double maxConfidence = 0.0;
 
-        // Layer 2: Evaluate heuristic rules
+        // Layer 2: Evaluate heuristic rules with sensitivity awareness
         for (HeuristicRule rule : rules) {
-            RuleResult result = rule.evaluate(vector);
+            RuleResult result = rule.evaluate(vector, sensitivity);
             if (result.isTriggered()) {
                 triggeredRules.add(result.getRuleName());
                 if (result.getConfidence() > maxConfidence) {
@@ -84,16 +103,17 @@ public class WarmupDetector {
             }
         }
 
-        // Apply sensitivity multiplier to Layer 2 rule confidence threshold.
-        // Lower multiplier (high sensitivity) → lower effective threshold → more triggers.
-        // Higher multiplier (low sensitivity) → higher effective threshold → fewer triggers.
-        if (!triggeredRules.isEmpty() && maxConfidence >= 0.5 * thresholdMultiplier) {
+        // Layer 2 fires when >= 2 rules trigger AND confidence gate passes.
+        // This avoids single-rule false positives on normal operations like
+        // batch compile (N2) or data migration (N4).
+        if (triggeredRules.size() >= 2 && maxConfidence >= 0.5 * thresholdMultiplier) {
             return WarmupDetectionResult.anomaly(2, maxConfidence, triggeredRules);
         }
 
         // Layer 3: Dynamic statistical detection (requires >=2 normals)
+        // Threshold is adjusted by sensitivity: high sensitivity → lower threshold → more detection
         if (historyNormals != null && historyNormals.size() >= 2) {
-            WarmupDetectionResult statResult = checkStatisticalAnomaly(vector, historyNormals);
+            WarmupDetectionResult statResult = checkStatisticalAnomaly(vector, historyNormals, thresholdMultiplier);
             if (statResult != null) return statResult;
         }
 
@@ -116,7 +136,8 @@ public class WarmupDetector {
     // =====================================================================
 
     private WarmupDetectionResult checkStatisticalAnomaly(FeatureVector vector,
-                                                           List<FeatureVector> historyNormals) {
+                                                           List<FeatureVector> historyNormals,
+                                                           double thresholdMultiplier) {
         double[] median = new double[FeatureType.COUNT];
         double[] mad = new double[FeatureType.COUNT];
 
@@ -126,6 +147,7 @@ public class WarmupDetector {
             historyValues[h] = historyNormals.get(h).toArray();
         }
 
+        // Step 1: Compute sample median and MAD (same as before)
         for (int i = 0; i < FeatureType.COUNT; i++) {
             double[] col = new double[historyNormals.size()];
             for (int h = 0; h < historyNormals.size(); h++) {
@@ -133,13 +155,21 @@ public class WarmupDetector {
             }
             java.util.Arrays.sort(col);
             median[i] = col[col.length / 2];
-            // MAD: median of absolute deviations
             double[] absDev = new double[col.length];
             for (int h = 0; h < col.length; h++) {
                 absDev[h] = Math.abs(col[h] - median[i]);
             }
             java.util.Arrays.sort(absDev);
             mad[i] = absDev[absDev.length / 2] * MAD_SCALE + EPSILON;
+        }
+
+        // Step 2: Bayesian shrinkage toward prior (stable when n < 20)
+        // shrinkage = n/(n+PRIOR_EFFECTIVE_N): approaches 1.0 as n grows.
+        double shrinkage = historyNormals.size()
+                / (historyNormals.size() + PRIOR_EFFECTIVE_N);
+        for (int i = 0; i < FeatureType.COUNT; i++) {
+            median[i] = shrinkage * median[i] + (1 - shrinkage) * PRIOR_MEDIAN[i];
+            mad[i] = Math.max(shrinkage * mad[i] + (1 - shrinkage) * PRIOR_MAD[i], EPSILON);
         }
 
         // Score the current vector
@@ -156,9 +186,12 @@ public class WarmupDetector {
         }
 
         double score = Math.sqrt(sumWeightedZ2);
-        double threshold = computeDynamicThreshold(historyValues);
+        // Use z-score based dynamic threshold (consistent with scoring formula)
+        double threshold = computeDynamicThreshold(historyValues, median, mad, historyNormals.size());
+        // Adjust threshold by sensitivity: higher sensitivity (lower multiplier) → easier to trigger
+        double adjustedThreshold = threshold * Math.max(thresholdMultiplier, 0.3);
 
-        if (score > threshold) {
+        if (score > adjustedThreshold) {
             List<DimensionReport> dims = buildDimensionReports(vector, current, zScores, contributions);
             List<DimensionReport> topDevs = computeTopDeviations(dims);
             return WarmupDetectionResult.statisticalAnomaly(score, threshold, dims, topDevs);
@@ -167,14 +200,21 @@ public class WarmupDetector {
         return null; // normal
     }
 
-    private double computeDynamicThreshold(double[][] historyValues) {
+    /**
+     * Computes dynamic threshold from history vectors using z-score based scoring
+     * (same formula as detection scoring, ensuring comparable magnitudes).
+     */
+    private double computeDynamicThreshold(double[][] historyValues, double[] baseMedian,
+                                            double[] baseMad, int nSamples) {
         int n = historyValues.length;
         double[] historyScores = new double[n];
         for (int h = 0; h < n; h++) {
-            // Use last n-1 as baseline to score current
             double sum = 0;
             for (int i = 0; i < FeatureType.COUNT; i++) {
-                sum += WARMUP_WEIGHTS[i] * historyValues[h][i] * historyValues[h][i];
+                // Score history vectors using same z-score formula as detection
+                double z = Math.max(-Z_CAP, Math.min(Z_CAP,
+                        (historyValues[h][i] - baseMedian[i]) / Math.max(baseMad[i], EPSILON)));
+                sum += WARMUP_WEIGHTS[i] * z * z;
             }
             historyScores[h] = Math.sqrt(sum);
         }
@@ -266,10 +306,17 @@ public class WarmupDetector {
         }
 
         WarmupInfo toWarmupInfo() {
+            int ruleCount = triggeredRules != null ? triggeredRules.size() : 0;
+            // Decouple alerting from baseline inclusion:
+            // - Alert (isAnomaly) when >= 2 rules trigger (unchanged)
+            // - Add to baseline only when 0 rules trigger (prevents baseline pollution)
+            //   A vector with 1+ triggered rules has suspicious signals and
+            //   should not contaminate the normal baseline even if it didn't trigger an alert.
+            boolean baseline = !isAnomaly && ruleCount < 1;
             return new WarmupInfo(
-                    triggeredRules != null ? triggeredRules.size() : 0,
+                    ruleCount,
                     triggeredRules != null ? triggeredRules : Collections.emptyList(),
-                    confidence, !isAnomaly, layer,
+                    confidence, baseline, layer,
                     statisticalScore, dynamicThreshold,
                     0);
         }

@@ -10,8 +10,8 @@ import com.anomalydetection.features.FeatureVector;
  */
 public class InterOpTimeCvRule implements HeuristicRule {
     private static final String RULE_NAME = "ROBOTIC_TIMING_PATTERN";
-    private static final double CV_THRESHOLD = 0.05;
-    private static final double MIN_OPS = 50;
+    private static final double CV_THRESHOLD = 0.55;
+    private static final double MIN_OPS = 100;
     private static final double CONFIDENCE = 0.85;
 
     @Override
@@ -19,6 +19,18 @@ public class InterOpTimeCvRule implements HeuristicRule {
         double cv = vector.get(FeatureType.INTER_OP_TIME_CV_BURST);
         double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
         if (cv < CV_THRESHOLD && dailyOps > MIN_OPS) {
+            return RuleResult.triggered(RULE_NAME, CONFIDENCE);
+        }
+        return RuleResult.notTriggered();
+    }
+
+    @Override
+    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+        double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
+        double cv = vector.get(FeatureType.INTER_OP_TIME_CV_BURST);
+        double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
+        double adjustedThreshold = CV_THRESHOLD * multiplier;
+        if (cv < adjustedThreshold && dailyOps > MIN_OPS) {
             return RuleResult.triggered(RULE_NAME, CONFIDENCE);
         }
         return RuleResult.notTriggered();
