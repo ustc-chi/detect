@@ -21,11 +21,11 @@ public class WarmupValidator {
 
     private final List<FeatureVector> normalPool;
     private final List<FeatureVector> attackPool;
-    private final double sensitivity;
+    private final int sensitivity;
 
     public WarmupValidator(List<FeatureVector> normalPool,
                            List<FeatureVector> attackPool,
-                           double sensitivity) {
+                           int sensitivity) {
         this.normalPool = normalPool;
         this.attackPool = attackPool;
         this.sensitivity = sensitivity;

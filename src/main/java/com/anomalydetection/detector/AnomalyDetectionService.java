@@ -1,6 +1,5 @@
 package com.anomalydetection.detector;
 
-import com.anomalydetection.features.FeatureType;
 import com.anomalydetection.features.FeatureVector;
 import com.anomalydetection.precheck.PreCheckService;
 import com.anomalydetection.precheck.PreCheckResult;
@@ -32,6 +31,8 @@ public class AnomalyDetectionService {
     public static final int DEFAULT_NORMAL_THRESHOLD = 10;
 
     private final int normalThreshold;
+    private final int defaultWarmupSensitivity;
+    private final int defaultActiveSensitivity;
     private final WarmupDetector warmupDetector;
     private final ActiveDetector activeDetector;
     private final BaselineDataProvider baselineProvider;
@@ -75,15 +76,25 @@ public class AnomalyDetectionService {
     // ===== Constructors =====
 
     public AnomalyDetectionService() {
-        this(DEFAULT_NORMAL_THRESHOLD);
+        this(DEFAULT_NORMAL_THRESHOLD, new ExternalBaselineProvider(),
+             SensitivityAdjuster.DEFAULT_SENSITIVITY, SensitivityAdjuster.DEFAULT_SENSITIVITY);
     }
 
     public AnomalyDetectionService(int normalThreshold) {
-        this(normalThreshold, new ExternalBaselineProvider());
+        this(normalThreshold, new ExternalBaselineProvider(),
+             SensitivityAdjuster.DEFAULT_SENSITIVITY, SensitivityAdjuster.DEFAULT_SENSITIVITY);
     }
 
     public AnomalyDetectionService(int normalThreshold, BaselineDataProvider baselineProvider) {
+        this(normalThreshold, baselineProvider,
+             SensitivityAdjuster.DEFAULT_SENSITIVITY, SensitivityAdjuster.DEFAULT_SENSITIVITY);
+    }
+
+    public AnomalyDetectionService(int normalThreshold, BaselineDataProvider baselineProvider,
+                                    int defaultWarmupSensitivity, int defaultActiveSensitivity) {
         this.normalThreshold = normalThreshold;
+        this.defaultWarmupSensitivity = defaultWarmupSensitivity;
+        this.defaultActiveSensitivity = defaultActiveSensitivity;
         this.warmupDetector = new WarmupDetector();
         this.activeDetector = new ActiveDetector();
         this.baselineProvider = baselineProvider;
@@ -93,14 +104,27 @@ public class AnomalyDetectionService {
     // ===== Public API =====
 
     /**
-     * Run the full detection pipeline on a feature vector with the given sensitivity.
+     * Run the full detection pipeline using configured default sensitivities.
      *
-     * @param vector      feature vector from feature-extractor (includes precheck data)
-     * @param resourceId  resource identifier for baseline lookup
-     * @param sensitivity detection sensitivity in [0.0, 1.0] (1.0 = most sensitive)
+     * @param vector     feature vector from feature-extractor
+     * @param resourceId resource identifier for baseline lookup
      * @return detection result
      */
-    public DetectionResult detect(FeatureVector vector, String resourceId, double sensitivity) {
+    public DetectionResult detect(FeatureVector vector, String resourceId) {
+        return detect(vector, resourceId, defaultWarmupSensitivity, defaultActiveSensitivity);
+    }
+
+    /**
+     * Run the full detection pipeline with explicit warmup and active sensitivities.
+     *
+     * @param vector             feature vector from feature-extractor (includes precheck data)
+     * @param resourceId         resource identifier for baseline lookup
+     * @param warmupSensitivity  warmup phase sensitivity in [1, 10] (10 = most sensitive)
+     * @param activeSensitivity  active phase sensitivity in [1, 10] (10 = most sensitive)
+     * @return detection result
+     */
+    public DetectionResult detect(FeatureVector vector, String resourceId,
+                                   int warmupSensitivity, int activeSensitivity) {
         // Step 1: Pre-check — inspect FeatureVector for signature matches
         PreCheckResult preCheck = preCheckService.check(vector);
         if (preCheck.isMatch()) {
@@ -114,16 +138,19 @@ public class AnomalyDetectionService {
         int normalCount = historyNormals != null ? historyNormals.size() : 0;
 
         if (normalCount < normalThreshold) {
-            // Warmup phase (sensitivity-aware)
-            LOG.fine("Resource " + resourceId + ": warmup phase (" + normalCount + "/" + normalThreshold + " normals)");
-            return warmupDetector.detect(vector, historyNormals, sensitivity).toDetectionResult(resourceId, vector);
+            // Warmup phase — sensitivity used internally via SensitivityAdjuster
+            LOG.fine("Resource " + resourceId + ": warmup phase (" + normalCount + "/" + normalThreshold
+                    + " normals, sensitivity=" + warmupSensitivity + ")");
+            return warmupDetector.detect(vector, historyNormals, warmupSensitivity)
+                    .toDetectionResult(resourceId, vector);
         }
 
         // Active phase — sensitivity passed to external module via BaselineDataProvider
-        BaselineStatsDTO stats = baselineProvider.getBaselineStats(resourceId, sensitivity);
+        BaselineStatsDTO stats = baselineProvider.getBaselineStats(resourceId, activeSensitivity);
         if (stats == null) {
             LOG.warning("Resource " + resourceId + ": baseline stats not available, falling back to warmup");
-            return warmupDetector.detect(vector, historyNormals, sensitivity).toDetectionResult(resourceId, vector);
+            return warmupDetector.detect(vector, historyNormals, warmupSensitivity)
+                    .toDetectionResult(resourceId, vector);
         }
 
         double[] weights = queryWeights(resourceId);

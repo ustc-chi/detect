@@ -60,7 +60,8 @@ public class WeightOptimizationRunner {
         printFeatureStats(median, mad);
 
         // Step 3: Run Warmup Layer 2 heuristic evaluation
-        System.out.println("--- Step 3: Warmup Layer 2 Heuristic Evaluation (sensitivity=0.7) ---");
+        int l2Sensitivity = SensitivityAdjuster.DEFAULT_SENSITIVITY;
+        System.out.println("--- Step 3: Warmup Layer 2 Heuristic Evaluation (sensitivity=" + l2Sensitivity + ") ---");
         String[][] l2Results = evaluateLayer2(dataset);
         printLayer2Results(l2Results, dataset);
 
@@ -120,7 +121,7 @@ public class WeightOptimizationRunner {
         System.out.println("--- Step 8: Warmup Progressive Validation ---");
         List<FeatureVector> allNormalFVs = dataset.normals.stream().map(v -> v.vector).collect(Collectors.toList());
         List<FeatureVector> allAttackFVs = dataset.attacks.stream().map(v -> v.vector).collect(Collectors.toList());
-        for (double testSens : new double[]{0.7, 1.0}) {
+        for (int testSens : new int[]{SensitivityAdjuster.DEFAULT_SENSITIVITY, SensitivityAdjuster.MAX_SENSITIVITY}) {
             WarmupValidator val = new WarmupValidator(allNormalFVs, allAttackFVs, testSens);
             WarmupValidator.ValidationResult vr = val.simulate(2, Math.min(10, allNormalFVs.size()));
             System.out.println("sensitivity=" + testSens + ":");
@@ -242,7 +243,7 @@ public class WeightOptimizationRunner {
                 new HighValueTargetingRule(),
                 new DeletionIntensityRule()
         );
-        double sensitivity = 0.7;
+        int sensitivity = SensitivityAdjuster.DEFAULT_SENSITIVITY;
         String[][] results = new String[dataset.all.size()][];
         for (int idx = 0; idx < dataset.all.size(); idx++) {
             var lv = dataset.all.get(idx);

@@ -22,8 +22,8 @@ public interface BaselineDataProvider {
      * sensitivity to the external module API so that an adjusted threshold is returned.
      *
      * @param resourceId  the resource identifier
-     * @param sensitivity detection sensitivity in [0.0, 1.0]
+     * @param sensitivity detection sensitivity in [1, 10], where 10 is most sensitive
      * @return baseline statistics, or null if not available
      */
-    BaselineStatsDTO getBaselineStats(String resourceId, double sensitivity);
+    BaselineStatsDTO getBaselineStats(String resourceId, int sensitivity);
 }

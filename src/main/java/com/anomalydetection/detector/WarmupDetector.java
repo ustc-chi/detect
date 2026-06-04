@@ -82,11 +82,11 @@ public class WarmupDetector {
      *
      * @param vector         current feature vector from feature-extractor
      * @param historyNormals previously accumulated normal vectors
-     * @param sensitivity    detection sensitivity in [0.0, 1.0] (1.0 = most sensitive)
+     * @param sensitivity    detection sensitivity in [1, 10] (10 = most sensitive)
      * @return warmup detection result
      */
     public WarmupDetectionResult detect(FeatureVector vector, List<FeatureVector> historyNormals,
-                                        double sensitivity) {
+                                        int sensitivity) {
         double thresholdMultiplier = SensitivityAdjuster.getThresholdMultiplier(sensitivity);
 
         List<String> triggeredRules = new ArrayList<>();
@@ -121,14 +121,14 @@ public class WarmupDetector {
     }
 
     /**
-     * Detect anomaly in warmup phase with default sensitivity (0.7).
+     * Detect anomaly in warmup phase with default sensitivity (5 — medium).
      *
      * @param vector         current feature vector from feature-extractor
      * @param historyNormals previously accumulated normal vectors
      * @return warmup detection result
      */
     public WarmupDetectionResult detect(FeatureVector vector, List<FeatureVector> historyNormals) {
-        return detect(vector, historyNormals, SensitivityAdjuster.getDefaultSensitivity());
+        return detect(vector, historyNormals, SensitivityAdjuster.DEFAULT_SENSITIVITY);
     }
 
     // =====================================================================

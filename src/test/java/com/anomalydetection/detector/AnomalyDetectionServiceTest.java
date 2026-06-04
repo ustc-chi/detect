@@ -38,10 +38,10 @@ class AnomalyDetectionServiceTest {
             public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
             public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
             public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, int s) { return null; }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
-        DetectionResult result = service.detect(createVector(), "res-1", 0.7);
+        DetectionResult result = service.detect(createVector(), "res-1");
         assertEquals(Phase.WARMUP, result.getPhase());
         assertNotNull(result.getWarmupInfo());
         assertEquals("res-1", result.getResourceId());
@@ -60,13 +60,13 @@ class AnomalyDetectionServiceTest {
                 return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
                         new double[FeatureType.COUNT], 10.0);
             }
-            public BaselineStatsDTO getBaselineStats(String r, double s) {
+            public BaselineStatsDTO getBaselineStats(String r, int s) {
                 return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
                         new double[FeatureType.COUNT], 10.0);
             }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
-        DetectionResult result = service.detect(createVector(), "res-2", 0.7);
+        DetectionResult result = service.detect(createVector(), "res-2");
         assertEquals(Phase.ACTIVE, result.getPhase());
     }
 
@@ -80,10 +80,10 @@ class AnomalyDetectionServiceTest {
             }
             public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
             public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, int s) { return null; }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(3, provider);
-        DetectionResult result = service.detect(createVector(), "res-3", 0.7);
+        DetectionResult result = service.detect(createVector(), "res-3");
         assertEquals(Phase.WARMUP, result.getPhase());
     }
 
@@ -93,13 +93,13 @@ class AnomalyDetectionServiceTest {
             public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
             public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
             public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, int s) { return null; }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
         FeatureVector vector = createVectorWithPrecheck(
                 new String[]{"/data/file.locked", "/docs/info.encrypted"},
                 new String[]{"/data/README_UNLOCK.txt"});
-        DetectionResult result = service.detect(vector, "res-4", 0.7);
+        DetectionResult result = service.detect(vector, "res-4");
         // signatureMatchResult uses Phase.WARMUP — distinguish by non-null signatureMatch
         assertNotNull(result.getSignatureMatch());
         assertTrue(result.isAnomaly());
@@ -115,13 +115,13 @@ class AnomalyDetectionServiceTest {
             public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
             public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
             public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, int s) { return null; }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
         FeatureVector vector = createVectorWithPrecheck(
                 null,
                 new String[]{"/tmp/HOW_TO_DECRYPT.html"});
-        DetectionResult result = service.detect(vector, "res-5", 0.7);
+        DetectionResult result = service.detect(vector, "res-5");
         assertNotNull(result.getSignatureMatch());
         assertTrue(result.isAnomaly());
         String sig = result.getSignatureMatch();
@@ -135,11 +135,11 @@ class AnomalyDetectionServiceTest {
             public List<FeatureVector> getHistoryNormals(String r) { return List.of(); }
             public List<FeatureVector> getHistoryAnomalies(String r) { return List.of(); }
             public BaselineStatsDTO getBaselineStats(String r) { return null; }
-            public BaselineStatsDTO getBaselineStats(String r, double s) { return null; }
+            public BaselineStatsDTO getBaselineStats(String r, int s) { return null; }
         };
         AnomalyDetectionService service = new AnomalyDetectionService(5, provider);
         FeatureVector vector = createVector(); // no precheck data
-        DetectionResult result = service.detect(vector, "res-6", 0.7);
+        DetectionResult result = service.detect(vector, "res-6");
         assertEquals(Phase.WARMUP, result.getPhase()); // falls through to warmup
     }
 }

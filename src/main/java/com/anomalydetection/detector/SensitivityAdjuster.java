@@ -1,44 +1,56 @@
 package com.anomalydetection.detector;
 
 /**
- * Utility for mapping sensitivity [0.0, 1.0] to a threshold multiplier.
+ * Utility for mapping int sensitivity [1, 10] to a threshold multiplier.
  *
- * <p>Mapping formula: {@code multiplier = 2.0 - sensitivity * 1.5}
+ * <p>Piecewise linear mapping with three anchor points:
  * <ul>
- *   <li>sensitivity = 1.0 (most sensitive) → multiplier = 0.5 (thresholds halved)</li>
- *   <li>sensitivity = 0.7 (default)       → multiplier ≈ 0.95 (preserves current behavior)</li>
- *   <li>sensitivity = 0.0 (least sensitive)→ multiplier = 2.0 (thresholds doubled)</li>
+ *   <li>sensitivity = 1  → multiplier = 2.0 (least sensitive, thresholds doubled)</li>
+ *   <li>sensitivity = 5  → multiplier = 0.95 (default / medium sensitivity)</li>
+ *   <li>sensitivity = 10 → multiplier = 0.5 (most sensitive, thresholds halved)</li>
  * </ul>
+ *
+ * <p>The formula is:
+ * <pre>
+ *   [1, 5]:  multiplier = 2.0 - (s - 1) × 0.2625
+ *   [5, 10]: multiplier = 0.95 - (s - 5) × 0.09
+ * </pre>
  */
 public final class SensitivityAdjuster {
 
-    private static final double MIN_SENSITIVITY = 0.0;
-    private static final double MAX_SENSITIVITY = 1.0;
-    private static final double DEFAULT_SENSITIVITY = 0.7;
+    public static final int MIN_SENSITIVITY = 1;
+    public static final int MAX_SENSITIVITY = 10;
+    public static final int DEFAULT_SENSITIVITY = 5;
 
     private SensitivityAdjuster() {
         // utility class
     }
 
     /**
-     * Returns the threshold multiplier for the given sensitivity value.
+     * Returns the threshold multiplier for the given int sensitivity.
      *
-     * @param sensitivity detection sensitivity in [0.0, 1.0], where 1.0 is most sensitive
+     * @param sensitivity detection sensitivity in [1, 10], where 10 is most sensitive
      * @return threshold multiplier in [0.5, 2.0]
-     * @throws IllegalArgumentException if sensitivity is outside [0.0, 1.0]
+     * @throws IllegalArgumentException if sensitivity is outside [1, 10]
      */
-    public static double getThresholdMultiplier(double sensitivity) {
+    public static double getThresholdMultiplier(int sensitivity) {
         if (sensitivity < MIN_SENSITIVITY || sensitivity > MAX_SENSITIVITY) {
             throw new IllegalArgumentException(
                 "sensitivity must be in [" + MIN_SENSITIVITY + ", " + MAX_SENSITIVITY + "], got: " + sensitivity);
         }
-        return 2.0 - sensitivity * 1.5;
+        if (sensitivity <= 5) {
+            // [1, 5]: 2.0 → 0.95
+            return 2.0 - (sensitivity - 1) * 0.2625;
+        } else {
+            // [5, 10]: 0.95 → 0.5
+            return 0.95 - (sensitivity - 5) * 0.09;
+        }
     }
 
     /**
-     * Returns the default sensitivity value (0.7) that preserves current detection behavior.
+     * Returns the default sensitivity value (5) — medium sensitivity.
      */
-    public static double getDefaultSensitivity() {
+    public static int getDefaultSensitivity() {
         return DEFAULT_SENSITIVITY;
     }
 }

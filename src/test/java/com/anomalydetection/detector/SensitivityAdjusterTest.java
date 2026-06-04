@@ -8,55 +8,106 @@ class SensitivityAdjusterTest {
     private static final double DELTA = 0.001;
 
     @Test
-    void testMaximumSensitivity() {
-        // sensitivity=1.0 → multiplier=0.5 (most sensitive, thresholds halved)
-        assertEquals(0.5, SensitivityAdjuster.getThresholdMultiplier(1.0), DELTA);
+    void testInt1_minimumSensitivity() {
+        assertEquals(2.0, SensitivityAdjuster.getThresholdMultiplier(1), DELTA);
     }
 
     @Test
-    void testDefaultSensitivity() {
-        // sensitivity=0.7 → multiplier≈0.95 (preserves current behavior)
-        assertEquals(0.95, SensitivityAdjuster.getThresholdMultiplier(0.7), DELTA);
+    void testInt5_defaultMediumSensitivity() {
+        assertEquals(0.95, SensitivityAdjuster.getThresholdMultiplier(5), DELTA);
     }
 
     @Test
-    void testMinimumSensitivity() {
-        // sensitivity=0.0 → multiplier=2.0 (least sensitive, thresholds doubled)
-        assertEquals(2.0, SensitivityAdjuster.getThresholdMultiplier(0.0), DELTA);
+    void testInt10_maximumSensitivity() {
+        assertEquals(0.5, SensitivityAdjuster.getThresholdMultiplier(10), DELTA);
     }
 
     @Test
-    void testMidRangeSensitivity() {
-        // sensitivity=0.5 → multiplier=2.0-0.5*1.5=1.25
-        assertEquals(1.25, SensitivityAdjuster.getThresholdMultiplier(0.5), DELTA);
+    void testInt2() {
+        assertEquals(1.7375, SensitivityAdjuster.getThresholdMultiplier(2), DELTA);
+    }
+
+    @Test
+    void testInt3() {
+        assertEquals(1.475, SensitivityAdjuster.getThresholdMultiplier(3), DELTA);
+    }
+
+    @Test
+    void testInt4() {
+        assertEquals(1.2125, SensitivityAdjuster.getThresholdMultiplier(4), DELTA);
+    }
+
+    @Test
+    void testInt6() {
+        assertEquals(0.86, SensitivityAdjuster.getThresholdMultiplier(6), DELTA);
+    }
+
+    @Test
+    void testInt7() {
+        assertEquals(0.77, SensitivityAdjuster.getThresholdMultiplier(7), DELTA);
+    }
+
+    @Test
+    void testInt8() {
+        assertEquals(0.68, SensitivityAdjuster.getThresholdMultiplier(8), DELTA);
+    }
+
+    @Test
+    void testInt9() {
+        assertEquals(0.59, SensitivityAdjuster.getThresholdMultiplier(9), DELTA);
     }
 
     @Test
     void testDefaultValue() {
-        assertEquals(0.7, SensitivityAdjuster.getDefaultSensitivity(), DELTA);
+        assertEquals(5, SensitivityAdjuster.getDefaultSensitivity());
     }
 
     @Test
-    void testInvalidBelowRange() {
+    void testDefaultConstant() {
+        assertEquals(5, SensitivityAdjuster.DEFAULT_SENSITIVITY);
+    }
+
+    @Test
+    void testInvalidBelowRange_zero() {
         assertThrows(IllegalArgumentException.class,
-                () -> SensitivityAdjuster.getThresholdMultiplier(-0.1));
+                () -> SensitivityAdjuster.getThresholdMultiplier(0));
     }
 
     @Test
-    void testInvalidAboveRange() {
+    void testInvalidBelowRange_negative() {
         assertThrows(IllegalArgumentException.class,
-                () -> SensitivityAdjuster.getThresholdMultiplier(1.1));
+                () -> SensitivityAdjuster.getThresholdMultiplier(-5));
     }
 
     @Test
-    void testBoundaryZero() {
-        // sensitivity=0.0 is valid (boundary)
-        assertEquals(2.0, SensitivityAdjuster.getThresholdMultiplier(0.0), DELTA);
+    void testInvalidAboveRange_11() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SensitivityAdjuster.getThresholdMultiplier(11));
     }
 
     @Test
-    void testBoundaryOne() {
-        // sensitivity=1.0 is valid (boundary)
-        assertEquals(0.5, SensitivityAdjuster.getThresholdMultiplier(1.0), DELTA);
+    void testInvalidAboveRange_100() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SensitivityAdjuster.getThresholdMultiplier(100));
+    }
+
+    @Test
+    void testBoundaryInt1() {
+        assertEquals(2.0, SensitivityAdjuster.getThresholdMultiplier(1), DELTA);
+    }
+
+    @Test
+    void testBoundaryInt10() {
+        assertEquals(0.5, SensitivityAdjuster.getThresholdMultiplier(10), DELTA);
+    }
+
+    @Test
+    void testMonotonicIncreasingSensitivity() {
+        // Higher sensitivity should always give lower (more sensitive) multiplier
+        for (int s = 1; s < 10; s++) {
+            assertTrue(SensitivityAdjuster.getThresholdMultiplier(s) >
+                       SensitivityAdjuster.getThresholdMultiplier(s + 1),
+                    "multiplier should strictly decrease as sensitivity increases at s=" + s);
+        }
     }
 }

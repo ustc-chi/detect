@@ -26,7 +26,7 @@ class WarmupActiveIntegrationTest {
                 return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
                         new double[FeatureType.COUNT], 10.0);
             }
-            public BaselineStatsDTO getBaselineStats(String r, double s) {
+            public BaselineStatsDTO getBaselineStats(String r, int s) {
                 return new BaselineStatsDTO(r, new double[FeatureType.COUNT],
                         new double[FeatureType.COUNT], 10.0);
             }
@@ -36,11 +36,11 @@ class WarmupActiveIntegrationTest {
         FeatureVector vec = createVector();
 
         for (int i = 0; i < 4; i++) {
-            DetectionResult r = service.detect(vec, "integ-res", 0.7);
+            DetectionResult r = service.detect(vec, "integ-res");
             assertEquals(Phase.WARMUP, r.getPhase(), "Round " + (i + 1) + " should be WARMUP");
         }
 
-        DetectionResult r5 = service.detect(vec, "integ-res", 0.7);
+        DetectionResult r5 = service.detect(vec, "integ-res");
         assertEquals(Phase.ACTIVE, r5.getPhase());
     }
 }

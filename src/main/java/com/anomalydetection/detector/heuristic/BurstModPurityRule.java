@@ -24,7 +24,7 @@ public class BurstModPurityRule implements HeuristicRule {
     }
 
     @Override
-    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+    public RuleResult evaluate(FeatureVector vector, int sensitivity) {
         double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
         double purity = vector.get(FeatureType.BURST_MOD_PURITY);
         double velocity = vector.get(FeatureType.PEAK_BURST_VELOCITY);

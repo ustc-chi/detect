@@ -29,7 +29,7 @@ public class FileTypeConcentrationRule implements HeuristicRule {
     }
 
     @Override
-    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+    public RuleResult evaluate(FeatureVector vector, int sensitivity) {
         double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
         double entropy = vector.get(FeatureType.PER_TYPE_ENTROPY);
         double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);

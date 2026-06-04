@@ -25,7 +25,7 @@ public class InterOpTimeCvRule implements HeuristicRule {
     }
 
     @Override
-    public RuleResult evaluate(FeatureVector vector, double sensitivity) {
+    public RuleResult evaluate(FeatureVector vector, int sensitivity) {
         double multiplier = com.anomalydetection.detector.SensitivityAdjuster.getThresholdMultiplier(sensitivity);
         double cv = vector.get(FeatureType.INTER_OP_TIME_CV_BURST);
         double dailyOps = vector.get(FeatureType.TOTAL_OPERATIONS_NORMALIZED);
